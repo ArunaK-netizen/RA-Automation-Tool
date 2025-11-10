@@ -3,6 +3,7 @@ export interface Draft {
   name: string
   createdAt: string
   allocations: Allocation[]
+  unallocatedLabs: Allocation[]
   slotMap: SlotMap
 }
 

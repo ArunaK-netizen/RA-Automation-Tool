@@ -13,8 +13,9 @@ export default function Home() {
   const [drafts, setDrafts] = useState<Draft[]>([])
   const [selectedDraft, setSelectedDraft] = useState<Draft | null>(null)
   const [allocations, setAllocations] = useState<Allocation[]>([])
+  const [unallocatedLabs, setUnallocatedLabs] = useState<Allocation[]>([])
   const [slotMap, setSlotMap] = useState<SlotMap>({})
-  const [activeTab, setActiveTab] = useState<'timetable' | 'stats' | 'table'>('timetable')
+  const [activeTab, setActiveTab] = useState<'timetable' | 'stats' | 'table' | 'unallocated'>('timetable')
   const [selectedRA, setSelectedRA] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
 
@@ -29,6 +30,7 @@ export default function Home() {
       name,
       createdAt: new Date().toISOString(),
       allocations: [],
+      unallocatedLabs: [],
       slotMap: {}
     }
     const updated = saveDraft(newDraft)
@@ -39,6 +41,7 @@ export default function Home() {
   const handleSelectDraft = (draft: Draft) => {
     setSelectedDraft(draft)
     setAllocations(draft.allocations || [])
+    setUnallocatedLabs(draft.unallocatedLabs || [])
     setSlotMap(draft.slotMap || {})
     setSelectedRA(null)
   }
@@ -49,21 +52,24 @@ export default function Home() {
     if (selectedDraft?.id === id) {
       setSelectedDraft(null)
       setAllocations([])
+      setUnallocatedLabs([])
       setSlotMap({})
     }
   }
 
-  const handleDataUploaded = (data: { allocations: Allocation[], slotMap: SlotMap }) => {
+  const handleDataUploaded = (data: { allocations: Allocation[], unallocatedLabs: Allocation[], slotMap: SlotMap }) => {
     if (selectedDraft) {
       const updatedDraft = {
         ...selectedDraft,
         allocations: data.allocations,
+        unallocatedLabs: data.unallocatedLabs,
         slotMap: data.slotMap
       }
       const updated = saveDraft(updatedDraft)
       setDrafts(updated)
       setSelectedDraft(updatedDraft)
       setAllocations(data.allocations)
+      setUnallocatedLabs(data.unallocatedLabs)
       setSlotMap(data.slotMap)
     }
   }
@@ -166,6 +172,16 @@ export default function Home() {
                     >
                       Allocation Details
                     </button>
+                    <button
+                      onClick={() => setActiveTab('unallocated')}
+                      className={`py-4 px-2 border-b-2 font-medium text-sm transition-colors ${
+                        activeTab === 'unallocated'
+                          ? 'border-primary text-primary'
+                          : 'border-transparent text-muted hover:text-foreground hover:border-gray-300'
+                      }`}
+                    >
+                      Unallocated Labs
+                    </button>
                   </nav>
 
                 </div>
@@ -182,6 +198,7 @@ export default function Home() {
                   {activeTab === 'stats' && (
                     <StatsDashboard
                       allocations={allocations}
+                      unallocatedLabs={unallocatedLabs}
                       slotMap={slotMap}
                     />
                   )}
@@ -189,6 +206,12 @@ export default function Home() {
                     <AllocationTable
                       allocations={allocations}
                       selectedRA={selectedRA}
+                    />
+                  )}
+                  {activeTab === 'unallocated' && (
+                    <AllocationTable
+                      allocations={unallocatedLabs}
+                      selectedRA={null}
                     />
                   )}
                 </div>

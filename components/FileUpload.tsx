@@ -4,7 +4,7 @@ import { Allocation, SlotMap } from '@/lib/types';
 import { BookOpen, Users, Loader } from 'lucide-react';
 
 interface FileUploadProps {
-  onDataUploaded: (data: { allocations: Allocation[], slotMap: SlotMap }) => void;
+  onDataUploaded: (data: { allocations: Allocation[], unallocatedLabs: Allocation[], slotMap: SlotMap }) => void;
   setIsLoading: (loading: boolean) => void;
 }
 
@@ -62,7 +62,11 @@ export default function FileUpload({ onDataUploaded, setIsLoading }: FileUploadP
 
       const result = await response.json();
       const slotMap = generateSlotMap();
-      onDataUploaded({ allocations: result.allocations || [], slotMap });
+      onDataUploaded({ 
+        allocations: result.allocations || [], 
+        unallocatedLabs: result.unallocatedLabs || [],
+        slotMap 
+      });
       toast.success('Allocation completed successfully');
 
     } catch (error) {

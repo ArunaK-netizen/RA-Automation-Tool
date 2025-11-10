@@ -210,10 +210,31 @@ for _, ra in ras_df.iterrows():
         })
 
 # ======================
+# FIND UNALLOCATED LABS
+# ======================
+
+# Create a set of allocated labs (using courseCode + classId + slot as unique identifier)
+allocated_labs = set(
+    (alloc["courseCode"], alloc["classId"], alloc["slot"]) 
+    for alloc in final_allocations
+)
+
+# Find unallocated labs
+unallocated_labs = []
+for lab in lab_pool:
+    if (lab["courseCode"], lab["classId"], lab["slot"]) not in allocated_labs:
+        unallocated_labs.append(lab)
+
+# ======================
 # OUTPUT
 # ======================
 
-with open(OUTPUT_FILE, 'w') as f:
-    json.dump(final_allocations, f, indent=2)
+result = {
+    "allocations": final_allocations,
+    "unallocatedLabs": unallocated_labs
+}
 
-print(f"Allocation saved to {OUTPUT_FILE}")
+with open(OUTPUT_FILE, 'w') as f:
+    json.dump(result, f, indent=2)
+
+print(f"Allocation saved to {OUTPUT_FILE} ({len(unallocated_labs)} labs unallocated)")

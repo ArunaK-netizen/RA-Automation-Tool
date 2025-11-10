@@ -30,7 +30,7 @@ export function getAllocationsForRA(allocations: Allocation[], raName: string): 
   return allocations.filter(a => a.raName === raName)
 }
 
-export function calculateStats(allocations: Allocation[]) {
+export function calculateStats(allocations: Allocation[], unallocatedLabs: Allocation[] = []) {
   const raStats = new Map<string, {
     name: string
     labsAssigned: number
@@ -82,7 +82,7 @@ export function calculateStats(allocations: Allocation[]) {
 
   return {
     totalRAs: raStats.size,
-    totalLabs: allocations.length,
+    totalLabs: allocations.length + unallocatedLabs.length,
     avgLabsPerRA: allocations.length / raStats.size,
     minLabs: Math.min(...statsArray.map(s => s.labsAssigned)),
     maxLabs: Math.max(...statsArray.map(s => s.labsAssigned)),

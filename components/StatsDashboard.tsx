@@ -7,11 +7,12 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsive
 
 interface Props {
   allocations: Allocation[]
+  unallocatedLabs?: Allocation[]
   slotMap: SlotMap
 }
 
-export default function StatsDashboard({ allocations, slotMap }: Props) {
-  const stats = calculateStats(allocations)
+export default function StatsDashboard({ allocations, unallocatedLabs = [], slotMap }: Props) {
+  const stats = calculateStats(allocations, unallocatedLabs)
 
   return (
     <div className="space-y-6">

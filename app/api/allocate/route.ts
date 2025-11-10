@@ -47,10 +47,13 @@ export async function POST(req: Request) {
     // 5. Read the generated JSON file
     const outputFile = path.join(tempDir, 'allocations.json')
     const outputData = await fs.readFile(outputFile, 'utf-8')
-    const allocations = JSON.parse(outputData)
+    const result = JSON.parse(outputData)
 
     // 6. Return the data to the frontend
-    return NextResponse.json({ allocations })
+    return NextResponse.json({ 
+      allocations: result.allocations,
+      unallocatedLabs: result.unallocatedLabs
+    })
 
   } catch (error) {
     console.error('Error during allocation:', error)
