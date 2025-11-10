@@ -27,7 +27,7 @@ export default function TimetableView({ allocations, selectedRA }: TimetableView
   const allocationMap = useMemo(() => {
     const map = new Map<string, Allocation>();
     filteredAllocations.forEach(alloc => {
-      const labSlots = alloc.slot.split('+').map(s => s.trim());
+      const labSlots = (alloc.slot || '').split('+').map(s => s.trim());
       labSlots.forEach(labSlot => {
         map.set(labSlot, alloc);
       });

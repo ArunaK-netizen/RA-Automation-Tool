@@ -19,7 +19,7 @@ export const TIME_SLOTS = [
 export const DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI']
 
 export function parseSlot(slot: string): string[] {
-  return slot.split('+').map(s => s.trim())
+  return (slot || '').split('+').map(s => s.trim())
 }
 
 export function getTheorySlot(labSlot: string, slotMap: SlotMap): string {
