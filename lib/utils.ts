@@ -58,7 +58,7 @@ export function calculateStats(allocations: Allocation[], unallocatedLabs: Alloc
     stats.slots.push(alloc.slot)
 
     // Check for discrepancies
-    if (stats.labsAssigned > stats.labsRequired) {
+    if (stats.labsAssigned > 5) {
       if (!stats.discrepancies.includes('Over-allocated')) {
         stats.discrepancies.push('Over-allocated')
       }

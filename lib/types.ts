@@ -21,10 +21,9 @@ export interface Course {
 }
 
 export interface RA {
-  'Name of the Student': string;
-  'Emp Id': string;
-  'Ph.D Registartion Number'?: string;
-  'NUMBER OF LABS': number;
+  'Name of the student': string;
+  'Emp Id'?: string;
+  'Ph.D Registration Number'?: string;
   'REGISTERED SLOTS'?: string;
 }
 

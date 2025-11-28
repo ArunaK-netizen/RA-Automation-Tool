@@ -1,0 +1,18 @@
+--- Course Analysis ---
+Total Lab Courses: 239
+Max Labs per Course: 2
+
+Top 10 Courses by Lab Count:
+    COURSE CODE             SLOT  NUM_LABS
+0      BACSE102  L29+L30+L49+L50         2
+322    BCSE309P            L1+L2         1
+310    BCSE309P          L43+L44         1
+311    BCSE309P          L15+L16         1
+312    BCSE309P            L5+L6         1
+313    BCSE309P          L43+L44         1
+314    BCSE309P          L29+L30         1
+315    BCSE309P          L25+L26         1
+316    BCSE309P          L29+L30         1
+317    BCSE309P            L1+L2         1
+
+No courses found with > 2 labs.

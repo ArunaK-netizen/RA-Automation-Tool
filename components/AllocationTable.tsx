@@ -25,9 +25,9 @@ export default function AllocationTable({ allocations, selectedRA }: AllocationT
 
     if (searchTerm) {
       const lowercasedFilter = searchTerm.toLowerCase();
-      filtered = filtered.filter(a => 
-        a.raName.toLowerCase().includes(lowercasedFilter) ||
-        String(a.empId).toLowerCase().includes(lowercasedFilter)
+      filtered = filtered.filter(a =>
+        (a.raName || '').toLowerCase().includes(lowercasedFilter) ||
+        String(a.empId || '').toLowerCase().includes(lowercasedFilter)
       );
     }
 
@@ -42,7 +42,9 @@ export default function AllocationTable({ allocations, selectedRA }: AllocationT
   const totalPages = Math.ceil(filteredAllocations.length / ITEMS_PER_PAGE);
 
   const handleDownloadExcel = () => {
-    const worksheet = XLSX.utils.json_to_sheet(filteredAllocations);
+    // Filter out empId and numLabsReq from the data
+    const dataToExport = filteredAllocations.map(({ empId, numLabsReq, ...rest }) => rest);
+    const worksheet = XLSX.utils.json_to_sheet(dataToExport);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Allocations");
     XLSX.writeFile(workbook, "lab_allocation.xlsx");
@@ -54,7 +56,7 @@ export default function AllocationTable({ allocations, selectedRA }: AllocationT
       <div className="flex flex-col md:flex-row justify-between items-center gap-4">
         <div className="relative w-full md:max-w-xs">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted" />
-          <input 
+          <input
             type="text"
             placeholder="Search by name or ID..."
             value={searchTerm}
@@ -117,14 +119,14 @@ export default function AllocationTable({ allocations, selectedRA }: AllocationT
             Page {currentPage} of {totalPages}
           </p>
           <div className="flex items-center gap-2">
-            <button 
+            <button
               onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
               disabled={currentPage === 1}
               className="px-3 py-1 text-sm font-medium text-muted bg-background rounded-md hover:bg-border disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               Previous
             </button>
-            <button 
+            <button
               onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
               disabled={currentPage === totalPages}
               className="px-3 py-1 text-sm font-medium text-muted bg-background rounded-md hover:bg-border disabled:opacity-50 disabled:cursor-not-allowed transition-colors"

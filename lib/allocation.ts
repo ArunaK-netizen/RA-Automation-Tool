@@ -48,11 +48,13 @@ export function generateAllocation(courses: Course[], ras: RA[], slotMap: SlotMa
   const allocations: Allocation[] = [];
 
   ras.forEach(ra => {
-    const raName = ra['Name of the Student'];
-    const empId = ra['Emp Id'];
-    const phdId = ra['Ph.D Registartion Number'] || '';
-    const numLabs = parseInt(String(ra['NUMBER OF LABS']), 10) || 0;
-    
+    const raName = ra['Name of the student'];
+    const empId = ra['Emp Id'] || '';
+    const phdId = ra['Ph.D Registration Number'] || '';
+
+    // Constant for number of labs
+    const numLabs = 4;
+
     const regSlots = (ra['REGISTERED SLOTS'] || '');
     const busySlots = new Set(
       regSlots

@@ -1,40 +1,32 @@
 import pandas as pd
 import random
 import json
-from itertools import combinations
+import math
 
 # ======================
 # CONFIGURATION
 # ======================
 
-COURSES_FILE = "temp/courses.xlsx"
-RAS_FILE = "temp/ras.xlsx"
-SLOT_MAP_FILE = "temp/l_to_slot_map.csv"  # e.g. "L1,A1"
 
-OUTPUT_FILE = "temp/allocations.json" # Changed to JSON
-
-# Maximum and minimum number of distinct courses per RA
+MIN_LABS = 4
+MAX_LABS = 6
 MIN_COURSES = 2
 MAX_COURSES = 3
-
-# Required number of labs per RA
-MIN_LABS = 4
-MAX_LABS = 5
-
+COURSES_FILE = "temp/courses.xlsx"
+RAS_FILE = "temp/ras.xlsx"
+SLOT_MAP_FILE = "temp/l_to_slot_map.csv"
+OUTPUT_FILE = "temp/allocations.json"
 
 # ======================
 # HELPER FUNCTIONS
 # ======================
 
 def parse_slots(slot_str):
-    """Convert 'L43+L44+L45+L46' -> ['L43','L44','L45','L46']"""
     if pd.isna(slot_str):
         return []
     return [s.strip() for s in slot_str.split('+') if s.strip()]
 
-
 def group_lab_hours(l_slots):
-    """Group consecutive Ls into pairs (2 Ls = 1 hour, 4 Ls = 2 hours)."""
     if not l_slots:
         return []
     grouped = []
@@ -42,16 +34,13 @@ def group_lab_hours(l_slots):
         grouped.append('+'.join(l_slots[i:i+2]))
     return grouped
 
-
 def has_clash(l_slots, busy_slots, l_to_theory_map):
-    """Check if lab's mapped theory slot overlaps with RA's busy slots."""
     for l in l_slots:
         if l in busy_slots:
             return True
         if l_to_theory_map.get(l) in busy_slots:
             return True
     return False
-
 
 # ======================
 # LOAD DATA
@@ -60,22 +49,18 @@ def has_clash(l_slots, busy_slots, l_to_theory_map):
 courses_df = pd.read_excel(COURSES_FILE)
 ras_df = pd.read_excel(RAS_FILE)
 slot_map_df = pd.read_csv(SLOT_MAP_FILE, header=None, names=["L", "Theory"])
-
-# Create dict for mapping
 l_to_theory = dict(zip(slot_map_df["L"], slot_map_df["Theory"]))
 
-# Filter lab courses only
-courses_df = courses_df[courses_df["COURSE TYPE"].str.strip() == "LO"].copy()
-
-# Expand slot strings into grouped lab hours
+# Filter lab courses (LO and ELA)
+courses_df = courses_df[courses_df["COURSE TYPE"].str.strip().isin(["LO", "ELA"])].copy()
 courses_df["L_SLOTS"] = courses_df["SLOT"].apply(parse_slots)
 courses_df["LAB_GROUPS"] = courses_df["L_SLOTS"].apply(group_lab_hours)
 
-# Flatten all lab groups for assignment
-lab_pool = []
+# Build Global Lab Pool (Bundles)
+bundles_map = {}
 for _, row in courses_df.iterrows():
     for group in row["LAB_GROUPS"]:
-        lab_pool.append({
+        lab_data = {
             "courseCode": row["COURSE CODE"],
             "courseTitle": row["COURSE TITLE"],
             "courseOwner": row.get("COURSE OWNER"),
@@ -86,148 +71,202 @@ for _, row in courses_df.iterrows():
             "employeeSchool": row.get("EMPLOYEE SCHOOL"),
             "courseMode": row.get("COURSE MODE"),
             "courseType": row.get("COURSE TYPE"),
-        })
+            "id": f"{row['COURSE CODE']}_{row['CLASS ID']}_{group}" # Unique ID
+        }
+        
+        key = (lab_data["courseCode"], lab_data["classId"])
+        if key not in bundles_map:
+            bundles_map[key] = {
+                "courseCode": lab_data["courseCode"],
+                "classId": lab_data["classId"],
+                "labs": []
+            }
+        bundles_map[key]["labs"].append(lab_data)
+
+all_bundles = list(bundles_map.values())
+
+# Prepare RAs
+ras = []
+for _, row in ras_df.iterrows():
+    pfix = row.get("Pfix", "")
+    name = row.get("Name of the student", "")
+    ra_name = f"{str(pfix).strip()} {str(name).strip()}" if pd.notna(pfix) and str(pfix).strip() else str(name).strip()
+    
+    reg_slots_str = str(row.get("REGISTERED SLOTS", ""))
+    busy_slots = set(s.strip() for s in reg_slots_str.replace(';', '+').split('+') if s.strip())
+    
+    ras.append({
+        "raName": ra_name,
+        "empId": row.get("Emp Id", ""),
+        "phdRegNo": row.get("Ph.D Registration Number", ""),
+        "registeredSlots": reg_slots_str,
+        "busySlots": busy_slots,
+        "assignedLabs": [],
+        "usedCourses": set() # Track Course Codes
+    })
 
 # ======================
-# ASSIGNMENT LOGIC (bundle-aware)
+# ALLOCATION LOGIC
+# ======================
+
+# ======================
+# ALLOCATION LOGIC
+# ======================
+
+def can_assign_single_lab(ra, lab):
+    # Check busy slots
+    if has_clash(parse_slots(lab["slot"]), ra["busySlots"], l_to_theory):
+        return False
+    # Check time clash with already assigned labs
+    if any(l["slot"] == lab["slot"] for l in ra["assignedLabs"]):
+        return False
+    # Check course limit (if new course)
+    if len(ra["usedCourses"]) >= MAX_COURSES and lab["courseCode"] not in ra["usedCourses"]:
+        return False
+    return True
+
+def assign_lab(ra, lab):
+    ra["assignedLabs"].append(lab)
+    ra["usedCourses"].add(lab["courseCode"])
+
+# Phase 1: Allocate up to MIN_LABS (4)
+print("Starting Phase 1: Allocating up to 4 labs...")
+random.shuffle(ras)
+
+# We iterate multiple times to fill up to 4 evenly
+changed = True
+while changed:
+    changed = False
+    random.shuffle(all_bundles) # Shuffle bundles each pass
+    
+    for ra in ras:
+        if len(ra["assignedLabs"]) >= MIN_LABS:
+            continue
+            
+        # Try to find a bundle
+        for bundle in all_bundles:
+            if not bundle["labs"]: continue
+            
+            # 1. Try to assign WHOLE bundle
+            all_valid = True
+            for l in bundle["labs"]:
+                if not can_assign_single_lab(ra, l):
+                    all_valid = False
+                    break
+            
+            # If whole bundle fits and doesn't exceed MAX_LABS (8)
+            if all_valid and (len(ra["assignedLabs"]) + len(bundle["labs"]) <= MAX_LABS):
+                # Assign all
+                for l in list(bundle["labs"]): # Copy list to avoid modification issues
+                    assign_lab(ra, l)
+                    bundle["labs"].remove(l)
+                changed = True
+                break # Move to next RA
+            
+            # 2. If whole bundle doesn't fit (due to MAX_LABS), try to split
+            # Only split if we really need labs to reach MIN_LABS
+            # And only if the course limit allows
+            if not all_valid:
+                # Check if at least some labs are valid
+                valid_labs = [l for l in bundle["labs"] if can_assign_single_lab(ra, l)]
+                
+                if valid_labs:
+                    # Take as many as needed to reach MIN_LABS, but respect MAX_LABS
+                    # Actually, in Phase 1 we just want to reach MIN_LABS (4)
+                    # But we can go up to MAX_LABS if it helps take a whole bundle (handled above)
+                    # Here we are splitting because we CAN'T take the whole bundle
+                    
+                    needed = MIN_LABS - len(ra["assignedLabs"])
+                    if needed > 0:
+                        take_count = min(len(valid_labs), needed)
+                        to_assign = valid_labs[:take_count]
+                        for l in to_assign:
+                            assign_lab(ra, l)
+                            bundle["labs"].remove(l)
+                        changed = True
+                        break
+
+        # Cleanup empty bundles
+        all_bundles = [b for b in all_bundles if b["labs"]]
+
+# Phase 2: Fill remaining labs up to MAX_LABS
+# PRIORITY: First ensure everyone reaches MIN_LABS, then distribute extras
+print(f"Starting Phase 2: Allocating remaining labs up to {MAX_LABS}...")
+if all_bundles:
+    # Sub-phase 2A: Prioritize under-allocated RAs (less than MIN_LABS)
+    print(f"Phase 2A: Prioritizing RAs with < {MIN_LABS} labs...")
+    changed = True
+    while changed:
+        changed = False
+        random.shuffle(all_bundles)
+        
+        # Sort RAs: under-allocated first
+        sorted_ras = sorted(ras, key=lambda r: len(r["assignedLabs"]))
+        
+        for ra in sorted_ras:
+            if len(ra["assignedLabs"]) >= MIN_LABS:
+                continue  # Skip RAs who already reached minimum
+                
+            # Try to grab one more lab (splitting allowed here to fill gaps)
+            for bundle in all_bundles:
+                if not bundle["labs"]: continue
+                
+                lab = bundle["labs"][0]
+                if can_assign_single_lab(ra, lab):
+                    assign_lab(ra, lab)
+                    bundle["labs"].remove(lab)
+                    changed = True
+                    break
+            
+            all_bundles = [b for b in all_bundles if b["labs"]]
+            if not all_bundles: break
+    
+    # Sub-phase 2B: Distribute remaining labs up to MAX_LABS
+    print(f"Phase 2B: Distributing extras up to {MAX_LABS}...")
+    if all_bundles:
+        changed = True
+        while changed:
+            changed = False
+            random.shuffle(all_bundles)
+            
+            for ra in ras:
+                if len(ra["assignedLabs"]) >= MAX_LABS:
+                    continue
+                    
+                for bundle in all_bundles:
+                    if not bundle["labs"]: continue
+                    
+                    lab = bundle["labs"][0]
+                    if can_assign_single_lab(ra, lab):
+                        assign_lab(ra, lab)
+                        bundle["labs"].remove(lab)
+                        changed = True
+                        break
+                
+                all_bundles = [b for b in all_bundles if b["labs"]]
+                if not all_bundles: break
+
+# ======================
+# OUTPUT GENERATION
 # ======================
 
 final_allocations = []
-
-# Build bundles: group lab groups by (courseCode, classId)
-bundles_map = {}
-for lab in lab_pool:
-    key = (lab.get("courseCode"), lab.get("classId"))
-    if key not in bundles_map:
-        bundles_map[key] = {
-            "courseCode": lab.get("courseCode"),
-            "courseTitle": lab.get("courseTitle"),
-            "courseOwner": lab.get("courseOwner"),
-            "classId": lab.get("classId"),
-            "roomNumbers": [],
-            "courseMode": lab.get("courseMode"),
-            "courseType": lab.get("courseType"),
-            "labs": []  # individual lab group dicts (slot, roomNumber, ...)
-        }
-    bundles_map[key]["labs"].append(lab)
-    # keep track of room numbers seen (optional)
-    rn = lab.get("roomNumber")
-    if rn and rn not in bundles_map[key]["roomNumbers"]:
-        bundles_map[key]["roomNumbers"].append(rn)
-
-bundles = list(bundles_map.values())
-
-for _, ra in ras_df.iterrows():
-    # Consistently create the RA name by combining Pfix and Name
-    pfix = ra.get("Pfix", "")
-    name = ra.get("Name of the Student", "")
-    if pd.notna(pfix) and pfix.strip():
-        ra_name = f"{pfix.strip()} {name.strip()}"
-    else:
-        ra_name = name.strip()
-    emp_id = ra["Emp Id"]
-    phd_id = ra.get("Ph.D Registartion Number", "")
-    reg_slots_str = str(ra.get("REGISTERED SLOTS", ""))
-    # Normalize separators and break into individual busy tokens
-    busy_slots = set(s.strip() for s in reg_slots_str.replace(';', '+').split('+') if s.strip())
-
-    # Shuffle bundles (group-level shuffle as requested)
-    shuffled_bundles = bundles.copy()
-    random.shuffle(shuffled_bundles)
-
-    assigned = []
-    used_courses = set()
-
-    # Helper to check if a lab (dict) conflicts with busy slots
-    def lab_has_clash(lab_dict):
-        return has_clash(parse_slots(lab_dict["slot"]), busy_slots, l_to_theory)
-
-    # Pass 1: Try to allocate whole bundles (all labs within bundle) where none of the bundle's labs clash
-    for bundle in shuffled_bundles:
-        bundle_course = bundle.get("courseCode")
-        bundle_labs = bundle.get("labs", [])
-        bundle_size = len(bundle_labs)
-
-        # Check if adding this bundle would exceed MAX_LABS
-        if len(assigned) + bundle_size > MAX_LABS:
-            continue
-
-        # Respect MAX_COURSES: if RA already has max distinct courses and this bundle is a new course, skip
-        if len(used_courses) >= MAX_COURSES and bundle_course not in used_courses:
-            continue
-
-        # If any lab in bundle clashes, skip whole bundle for now
-        if any(lab_has_clash(lab) for lab in bundle_labs):
-            continue
-
-        # Also ensure we aren't assigning duplicate classId+slot already assigned to this RA
-        already = any(a.get('classId') == bundle.get('classId') and a.get('slot') in [l.get('slot') for l in bundle_labs] for a in assigned)
-        if already:
-            continue
-
-        # Assign all labs in bundle
-        for lab in bundle_labs:
-            assigned.append(lab)
-        used_courses.add(bundle_course)
-    # Pass 2: Fill remaining slots until MIN_LABS is reached (ignoring clashes if necessary)
-    while len(assigned) < MIN_LABS:
-        # Flatten all labs from bundles, but avoid labs already added (same classId+slot)
-        flat_labs = []
-        for bundle in bundles:
-            for lab in bundle.get('labs', []):
-                if not any(a['classId'] == lab['classId'] and a['slot'] == lab['slot'] for a in assigned):
-                    flat_labs.append(lab)
-                    
-        random.shuffle(flat_labs)
-
-        for lab in flat_labs:
-            if len(used_courses) >= MAX_COURSES and lab["courseCode"] not in used_courses:
-                continue
-            # In this pass we allow clashes (to fill requirement)
-            assigned.append(lab)
-            used_courses.add(lab["courseCode"])
-            if len(assigned) >= MAX_LABS:
-                break
-    # Pass 3: If distinct course requirement not met, try swapping assigned labs with labs from other courses
-    if len(used_courses) < MIN_COURSES:
-        other_course_labs = [l for b in bundles for l in b.get('labs', []) if l['courseCode'] not in used_courses]
-        i = 0
-        while len(used_courses) < MIN_COURSES and i < len(other_course_labs) and i < len(assigned):
-            new_lab = other_course_labs[i]
-            assigned[len(assigned) - 1 - i] = new_lab
-            used_courses.add(new_lab["courseCode"])
-            i += 1
-
-    # Append per-lab entries to final allocations (preserve individual lab rows)
-    for lab in assigned:
+for ra in ras:
+    for lab in ra["assignedLabs"]:
         final_allocations.append({
-            "raName": ra_name,
-            "empId": emp_id,
-            "phdRegNo": phd_id,
-            "registeredSlots": reg_slots_str,
+            "raName": ra["raName"],
+            "empId": ra["empId"],
+            "phdRegNo": ra["phdRegNo"],
+            "registeredSlots": ra["registeredSlots"],
+            "numLabsReq": MIN_LABS, # Base requirement
             **lab,
             "comments": ""
         })
 
-# ======================
-# FIND UNALLOCATED LABS
-# ======================
-
-# Create a set of allocated labs (using courseCode + classId + slot as unique identifier)
-allocated_labs = set(
-    (alloc["courseCode"], alloc["classId"], alloc["slot"]) 
-    for alloc in final_allocations
-)
-
-# Find unallocated labs
+# Calculate unallocated
 unallocated_labs = []
-for lab in lab_pool:
-    if (lab["courseCode"], lab["classId"], lab["slot"]) not in allocated_labs:
-        unallocated_labs.append(lab)
-
-# ======================
-# OUTPUT
-# ======================
+for bundle in all_bundles:
+    unallocated_labs.extend(bundle["labs"])
 
 result = {
     "allocations": final_allocations,
@@ -237,4 +276,4 @@ result = {
 with open(OUTPUT_FILE, 'w') as f:
     json.dump(result, f, indent=2)
 
-print(f"Allocation saved to {OUTPUT_FILE} ({len(unallocated_labs)} labs unallocated)")
+print(f"Allocation saved. Unallocated labs: {len(unallocated_labs)}")
