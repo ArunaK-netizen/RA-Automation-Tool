@@ -1,7 +1,9 @@
-import { useState, useRef, useEffect } from 'react';
+'use client'
+
+import { useState, useRef } from 'react';
 import { toast } from 'react-hot-toast';
 import { Allocation, SlotMap } from '@/lib/types';
-import { BookOpen, Users, Loader } from 'lucide-react';
+import { BookOpen, Users, Loader2, UploadCloud, FileSpreadsheet, X } from 'lucide-react';
 
 interface FileUploadProps {
   onDataUploaded: (data: { allocations: Allocation[], unallocatedLabs: Allocation[], slotMap: SlotMap }) => void;
@@ -30,6 +32,7 @@ export default function FileUpload({ onDataUploaded, setIsLoading }: FileUploadP
     courses?: File;
     ras?: File;
   }>({});
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const handleFileChange = (type: 'courses' | 'ras') => (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -45,6 +48,7 @@ export default function FileUpload({ onDataUploaded, setIsLoading }: FileUploadP
     }
 
     setIsLoading(true);
+    setIsProcessing(true);
     try {
       const formData = new FormData();
       formData.append('courses', files.courses);
@@ -62,10 +66,10 @@ export default function FileUpload({ onDataUploaded, setIsLoading }: FileUploadP
 
       const result = await response.json();
       const slotMap = generateSlotMap();
-      onDataUploaded({ 
-        allocations: result.allocations || [], 
+      onDataUploaded({
+        allocations: result.allocations || [],
         unallocatedLabs: result.unallocatedLabs || [],
-        slotMap 
+        slotMap
       });
       toast.success('Allocation completed successfully');
 
@@ -74,6 +78,7 @@ export default function FileUpload({ onDataUploaded, setIsLoading }: FileUploadP
       toast.error(`Error: ${err.message}`);
     } finally {
       setIsLoading(false);
+      setIsProcessing(false);
     }
   };
 
@@ -83,8 +88,8 @@ export default function FileUpload({ onDataUploaded, setIsLoading }: FileUploadP
     setFiles({});
   };
 
-  const FileInput = ({ id, file, type, icon }: { id: string, file?: File, type: 'courses' | 'ras', icon: React.ReactNode }) => (
-    <div className="border-2 border-dashed border-border rounded-lg p-6 text-center bg-background/50 hover:border-primary transition-colors">
+  const FileInput = ({ id, file, type, icon, title, description }: { id: string, file?: File, type: 'courses' | 'ras', icon: React.ReactNode, title: string, description: string }) => (
+    <div className="relative group">
       <input
         type="file"
         accept=".xlsx,.xls"
@@ -93,38 +98,108 @@ export default function FileUpload({ onDataUploaded, setIsLoading }: FileUploadP
         id={id}
         onChange={handleFileChange(type)}
       />
-      <label htmlFor={id} className="cursor-pointer flex flex-col items-center justify-center">
-        {icon}
-        <span className="text-foreground font-medium mt-4">Upload {type === 'courses' ? 'Courses' : 'RAs'} File</span>
-        <span className="text-sm text-muted mt-1">
-          {file ? file.name : 'Click or drag and drop'}
-        </span>
+      <label
+        htmlFor={id}
+        className={`
+          flex flex-col items-center justify-center p-8 rounded-2xl border-2 border-dashed transition-all duration-300 cursor-pointer
+          ${file
+            ? 'border-primary bg-primary/5'
+            : 'border-border hover:border-primary/50 hover:bg-secondary/50'
+          }
+        `}
+      >
+        <div className={`
+          p-4 rounded-full mb-4 transition-transform duration-300 group-hover:scale-110
+          ${file ? 'bg-primary/10 text-primary' : 'bg-secondary text-muted-foreground'}
+        `}>
+          {file ? <FileSpreadsheet className="w-8 h-8" /> : icon}
+        </div>
+
+        <div className="text-center space-y-1">
+          <p className="font-semibold text-foreground">
+            {file ? file.name : title}
+          </p>
+          <p className="text-xs text-muted-foreground max-w-[200px]">
+            {file ? (
+              <span className="text-emerald-600 dark:text-emerald-400 font-medium">Ready for upload</span>
+            ) : (
+              description
+            )}
+          </p>
+        </div>
+
+        {file && (
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              setFiles(prev => {
+                const newFiles = { ...prev };
+                delete newFiles[type];
+                return newFiles;
+              });
+              if (type === 'courses' && coursesFileRef.current) coursesFileRef.current.value = '';
+              if (type === 'ras' && rasFileRef.current) rasFileRef.current.value = '';
+            }}
+            className="absolute top-2 right-2 p-1 rounded-full hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
       </label>
     </div>
   );
 
   return (
-    <div className="bg-card rounded-lg shadow-sm border border-border p-4 space-y-4">
-      <h3 className="font-semibold text-foreground">Upload Files</h3>
-      <FileInput id="courses-upload" file={files.courses} type="courses" icon={<BookOpen className="w-10 h-10 text-muted" />} />
-      <FileInput id="ras-upload" file={files.ras} type="ras" icon={<Users className="w-10 h-10 text-muted" />} />
+    <div className="glass-card rounded-2xl p-8 space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="text-center space-y-2">
+        <h2 className="text-2xl font-bold font-display tracking-tight">Upload Data Files</h2>
+        <p className="text-muted-foreground">Upload your Course and RA Excel sheets to begin allocation</p>
+      </div>
 
-      <div className="flex justify-end space-x-3 pt-2">
-        <button
-          onClick={handleClearFiles}
-          className="px-4 py-2 text-sm font-medium text-muted bg-background rounded-md hover:bg-border transition-colors disabled:opacity-50"
-          disabled={!files.courses && !files.ras}
-        >
-          Clear
-        </button>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <FileInput
+          id="courses-upload"
+          file={files.courses}
+          type="courses"
+          icon={<BookOpen className="w-8 h-8" />}
+          title="Upload Courses File"
+          description=""
+        />
+        <FileInput
+          id="ras-upload"
+          file={files.ras}
+          type="ras"
+          icon={<Users className="w-8 h-8" />}
+          title="Upload RAs File"
+          description=""
+        />
+      </div>
+
+      <div className="flex justify-center pt-4">
         <button
           onClick={handleSubmit}
-          disabled={!files.courses || !files.ras}
-          className="px-6 py-2 text-sm font-medium text-white bg-primary rounded-md hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+          disabled={!files.courses || !files.ras || isProcessing}
+          className={`
+            relative overflow-hidden group px-8 py-3 rounded-xl font-medium text-white transition-all duration-300
+            ${!files.courses || !files.ras || isProcessing
+              ? 'bg-muted text-muted-foreground cursor-not-allowed'
+              : 'bg-primary hover:bg-primary/90 shadow-lg shadow-primary/25 hover:shadow-primary/40 hover:-translate-y-0.5'
+            }
+          `}
         >
-          {false ? (
-            <><Loader className="animate-spin w-4 h-4 mr-2" /> Processing...</>
-          ) : 'Start Allocation'}
+          <div className="flex items-center gap-2 relative z-10">
+            {isProcessing ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <span>Processing Allocation...</span>
+              </>
+            ) : (
+              <>
+                <UploadCloud className="w-5 h-5" />
+                <span>Start Allocation Process</span>
+              </>
+            )}
+          </div>
         </button>
       </div>
     </div>

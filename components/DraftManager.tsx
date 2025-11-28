@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { Draft } from '@/lib/types'
-import { FilePlus, Trash2, ChevronRight } from 'lucide-react'
+import { FilePlus, Trash2, ChevronRight, FileText, Clock } from 'lucide-react'
 
 interface DraftManagerProps {
   drafts: Draft[]
@@ -29,48 +29,61 @@ export default function DraftManager({
   }
 
   return (
-    <div className="bg-card rounded-lg shadow-sm border border-border p-4">
-      <h3 className="font-semibold text-foreground mb-4">Drafts</h3>
-      <div className="flex space-x-2 mb-4">
+    <div className="glass-card rounded-2xl p-6 space-y-6">
+      <div className="flex items-center justify-between">
+        <h3 className="font-semibold font-display text-lg">Saved Drafts</h3>
+        <span className="text-xs font-medium px-2 py-1 rounded-full bg-secondary text-muted-foreground">
+          {drafts.length}
+        </span>
+      </div>
+
+      <div className="flex gap-2">
         <input
           type="text"
           value={newDraftName}
           onChange={(e) => setNewDraftName(e.target.value)}
           placeholder="New draft name..."
-          className="flex-grow bg-background border border-border rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:border-primary transition"
+          className="flex-grow bg-background/50 border border-border rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all outline-none"
           onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
         />
         <button
           onClick={handleCreate}
-          className="bg-primary text-white px-3 py-2 rounded-md hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="bg-primary text-white p-2 rounded-xl hover:bg-primary/90 shadow-lg shadow-primary/25 hover:shadow-primary/40 hover:-translate-y-0.5 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:shadow-none"
           disabled={!newDraftName.trim()}
         >
           <FilePlus className="w-5 h-5" />
         </button>
       </div>
 
-      <div className="space-y-2">
+      <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
         {drafts.length > 0 ? (
           drafts.map(draft => (
             <div
               key={draft.id}
               onClick={() => onSelectDraft(draft)}
-              className={`group flex items-center justify-between p-3 rounded-md cursor-pointer transition-colors ${
-                selectedDraft?.id === draft.id
-                  ? 'bg-primary/10'
-                  : 'hover:bg-background'
-              }`}>
-              <div className="flex-grow">
-                <p className={`font-medium text-sm ${
-                  selectedDraft?.id === draft.id ? 'text-primary' : 'text-foreground'
+              className={`group relative flex items-center justify-between p-4 rounded-xl cursor-pointer transition-all duration-200 border ${selectedDraft?.id === draft.id
+                  ? 'bg-primary/10 border-primary/20 shadow-sm'
+                  : 'bg-secondary/30 border-transparent hover:bg-secondary/50 hover:border-border/50'
                 }`}>
-                  {draft.name}
-                </p>
-                <p className="text-xs text-muted">
-                  {(draft.allocations || []).length} allocations
-                </p>
+              <div className="flex-grow min-w-0 mr-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <FileText className={`w-4 h-4 ${selectedDraft?.id === draft.id ? 'text-primary' : 'text-muted-foreground'}`} />
+                  <p className={`font-medium text-sm truncate ${selectedDraft?.id === draft.id ? 'text-primary' : 'text-foreground'
+                    }`}>
+                    {draft.name}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                  <span className="flex items-center gap-1">
+                    <Clock className="w-3 h-3" />
+                    {new Date(draft.createdAt).toLocaleDateString()}
+                  </span>
+                  <span>•</span>
+                  <span>{(draft.allocations || []).length} allocations</span>
+                </div>
               </div>
-              <div className="flex items-center space-x-2">
+
+              <div className="flex items-center gap-1">
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -78,18 +91,21 @@ export default function DraftManager({
                       onDeleteDraft(draft.id);
                     }
                   }}
-                  className="text-muted hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="p-2 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-all duration-200"
+                  title="Delete draft"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
                 {selectedDraft?.id === draft.id && (
-                  <ChevronRight className="w-5 h-5 text-primary" />
+                  <ChevronRight className="w-5 h-5 text-primary animate-in slide-in-from-left-2" />
                 )}
               </div>
             </div>
           ))
         ) : (
-          <p className="text-sm text-muted text-center py-4">No drafts yet.</p>
+          <div className="text-center py-8 border-2 border-dashed border-border rounded-xl">
+            <p className="text-sm text-muted-foreground">No drafts saved yet</p>
+          </div>
         )}
       </div>
     </div>

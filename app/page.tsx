@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { toast } from 'react-hot-toast'
 import { Draft, Allocation, SlotMap } from '@/lib/types'
 import { loadDrafts, saveDraft, deleteDraft } from '@/lib/storage'
 import DraftManager from '@/components/DraftManager'
@@ -8,6 +9,8 @@ import FileUpload from '@/components/FileUpload'
 import TimetableView from '@/components/TimetableView'
 import StatsDashboard from '@/components/StatsDashboard'
 import AllocationTable from '@/components/AllocationTable'
+import CustomSelect from '@/components/CustomSelect'
+import { Calendar, BarChart2, Table2, AlertCircle } from 'lucide-react'
 
 export default function Home() {
   const [drafts, setDrafts] = useState<Draft[]>([])
@@ -25,6 +28,12 @@ export default function Home() {
   }, [])
 
   const handleCreateDraft = (name: string) => {
+    // Unique Name Check
+    if (drafts.some(d => d.name.toLowerCase() === name.toLowerCase())) {
+      toast.error('A draft with this name already exists. Please choose a unique name.');
+      return;
+    }
+
     const newDraft: Draft = {
       id: Date.now().toString(),
       name,
@@ -36,6 +45,7 @@ export default function Home() {
     const updated = saveDraft(newDraft)
     setDrafts(updated)
     setSelectedDraft(newDraft)
+    toast.success('New draft created successfully');
   }
 
   const handleSelectDraft = (draft: Draft) => {
@@ -55,6 +65,7 @@ export default function Home() {
       setUnallocatedLabs([])
       setSlotMap({})
     }
+    toast.success('Draft deleted');
   }
 
   const handleDataUploaded = (data: { allocations: Allocation[], unallocatedLabs: Allocation[], slotMap: SlotMap }) => {
@@ -74,152 +85,123 @@ export default function Home() {
     }
   }
 
-  const uniqueRAs = Array.from(new Set((allocations || []).map(a => a.raName)))
+  const uniqueRAs = Array.from(new Set((allocations || []).map(a => a.raName))).sort()
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="bg-card shadow-sm border-b border-border">
-        <div className="max-w-screen-xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <h1 className="text-2xl font-bold text-foreground font-display">RA Lab Allocation System</h1>
-          <p className="text-muted mt-1">Manage and visualize teaching assistant lab schedules</p>
-        </div>
-      </header>
+    <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 animate-in fade-in duration-500">
+      {/* Sidebar */}
+      <aside className="lg:col-span-1 space-y-8">
+        <DraftManager
+          drafts={drafts}
+          selectedDraft={selectedDraft}
+          onCreateDraft={handleCreateDraft}
+          onSelectDraft={handleSelectDraft}
+          onDeleteDraft={handleDeleteDraft}
+        />
 
-      <main className="max-w-screen-xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-          {/* Sidebar */}
-          <aside className="lg:col-span-1 space-y-8">
-            <DraftManager
-              drafts={drafts}
-              selectedDraft={selectedDraft}
-              onCreateDraft={handleCreateDraft}
-              onSelectDraft={handleSelectDraft}
-              onDeleteDraft={handleDeleteDraft}
-            />
-            
-            {selectedDraft && (
-              <FileUpload onDataUploaded={handleDataUploaded} setIsLoading={setIsLoading} />
-            )}
-
-            {allocations.length > 0 && (
-              <div className="bg-card rounded-lg shadow-sm p-4 border border-border">
-                <h3 className="font-semibold text-foreground mb-3">Select RA</h3>
-                <select
-                  className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:border-primary transition"
-                  value={selectedRA || ''}
-                  onChange={(e) => setSelectedRA(e.target.value || null)}
-                >
-                  <option value="">All RAs</option>
-                  {uniqueRAs.map(ra => (
-                    <option key={ra} value={ra}>{ra}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-          </aside>
-
-          {/* Main Content */}
-          <div className="lg:col-span-3">
-            {!selectedDraft ? (
-              <div className="bg-card rounded-lg shadow-sm border border-border p-12 text-center">
-                <h2 className="text-2xl font-semibold text-foreground mb-2">
-                  Welcome
-                </h2>
-                <p className="text-muted">
-                  Create or select a draft to begin
-                </p>
-              </div>
-            ) : allocations.length === 0 && !isLoading ? (
-              <div className="bg-card rounded-lg shadow-sm border border-border p-12 text-center">
-                <h2 className="text-xl font-semibold text-foreground mb-2">
-                  No Data Uploaded
-                </h2>
-                <p className="text-muted">
-                  Upload course and RA files to generate an allocation
-                </p>
-              </div>
-            ) : (
-              <div className="bg-card rounded-lg shadow-sm border border-border">
-                <div className="border-b border-border">
-                  <nav className="flex space-x-4 px-6" aria-label="Tabs">
-                    <button
-                      onClick={() => setActiveTab('timetable')}
-                      className={`py-4 px-2 border-b-2 font-medium text-sm transition-colors ${
-                        activeTab === 'timetable'
-                          ? 'border-primary text-primary'
-                          : 'border-transparent text-muted hover:text-foreground hover:border-gray-300'
-                      }`}
-                    >
-                      Timetable
-                    </button>
-                    <button
-                      onClick={() => setActiveTab('stats')}
-                      className={`py-4 px-2 border-b-2 font-medium text-sm transition-colors ${
-                        activeTab === 'stats'
-                          ? 'border-primary text-primary'
-                          : 'border-transparent text-muted hover:text-foreground hover:border-gray-300'
-                      }`}
-                    >
-                      Statistics
-                    </button>
-                    <button
-                      onClick={() => setActiveTab('table')}
-                      className={`py-4 px-2 border-b-2 font-medium text-sm transition-colors ${
-                        activeTab === 'table'
-                          ? 'border-primary text-primary'
-                          : 'border-transparent text-muted hover:text-foreground hover:border-gray-300'
-                      }`}
-                    >
-                      Allocation Details
-                    </button>
-                    <button
-                      onClick={() => setActiveTab('unallocated')}
-                      className={`py-4 px-2 border-b-2 font-medium text-sm transition-colors ${
-                        activeTab === 'unallocated'
-                          ? 'border-primary text-primary'
-                          : 'border-transparent text-muted hover:text-foreground hover:border-gray-300'
-                      }`}
-                    >
-                      Unallocated Labs
-                    </button>
-                  </nav>
-
-                </div>
-
-                {/* Tab Content */}
-                <div className="p-6">
-                  {activeTab === 'timetable' && (
-                    <TimetableView
-                      allocations={allocations}
-                      slotMap={slotMap}
-                      selectedRA={selectedRA}
-                    />
-                  )}
-                  {activeTab === 'stats' && (
-                    <StatsDashboard
-                      allocations={allocations}
-                      unallocatedLabs={unallocatedLabs}
-                      slotMap={slotMap}
-                    />
-                  )}
-                  {activeTab === 'table' && (
-                    <AllocationTable
-                      allocations={allocations}
-                      selectedRA={selectedRA}
-                    />
-                  )}
-                  {activeTab === 'unallocated' && (
-                    <AllocationTable
-                      allocations={unallocatedLabs}
-                      selectedRA={null}
-                    />
-                  )}
-                </div>
-              </div>
-            )}
+        {selectedDraft && (
+          <div className="space-y-8 animate-in slide-in-from-left-4 duration-500 delay-100">
+            <FileUpload onDataUploaded={handleDataUploaded} setIsLoading={setIsLoading} />
           </div>
-        </div>
-      </main>
+        )}
+      </aside>
+
+      {/* Main Content */}
+      <div className="lg:col-span-3 space-y-6">
+        {!selectedDraft ? (
+          <div className="h-[60vh] glass-card rounded-3xl border-2 border-dashed border-border flex flex-col items-center justify-center text-center p-12 animate-in zoom-in-95 duration-500">
+            <div className="w-20 h-20 rounded-full bg-secondary/50 flex items-center justify-center mb-6">
+              <Table2 className="w-10 h-10 text-muted-foreground" />
+            </div>
+            <h2 className="text-3xl font-bold font-display tracking-tight mb-3">
+              Welcome to Allocation System
+            </h2>
+            <p className="text-muted-foreground max-w-md text-lg">
+              Create a new draft or select an existing one from the sidebar to begin managing lab allocations.
+            </p>
+          </div>
+        ) : allocations.length === 0 && !isLoading ? (
+          <div className="h-[60vh] glass-card rounded-3xl border-2 border-dashed border-border flex flex-col items-center justify-center text-center p-12 animate-in zoom-in-95 duration-500">
+            <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mb-6">
+              <AlertCircle className="w-10 h-10 text-primary" />
+            </div>
+            <h2 className="text-2xl font-bold font-display tracking-tight mb-3">
+              No Data Uploaded Yet
+            </h2>
+            <p className="text-muted-foreground max-w-md">
+              Please upload the Course Details and RA List Excel files using the upload panel on the left to generate the allocation.
+            </p>
+          </div>
+        ) : (
+          <div className="glass-card rounded-3xl overflow-hidden shadow-xl shadow-black/5 animate-in slide-in-from-bottom-8 duration-700">
+            <div className="border-b border-border/50 bg-secondary/30 backdrop-blur-sm sticky top-0 z-10 flex flex-col md:flex-row items-center justify-between gap-4 p-4 md:px-6">
+              <nav className="flex overflow-x-auto no-scrollbar" aria-label="Tabs">
+                {[
+                  { id: 'timetable', label: 'Timetable', icon: Calendar },
+                  { id: 'stats', label: 'Statistics', icon: BarChart2 },
+                  { id: 'table', label: 'Details', icon: Table2 },
+                  { id: 'unallocated', label: 'Unallocated', icon: AlertCircle },
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id as any)}
+                    className={`
+                      group flex items-center gap-2 py-2 px-4 rounded-lg font-medium text-sm transition-all duration-300 whitespace-nowrap mr-2
+                      ${activeTab === tab.id
+                        ? 'bg-primary text-primary-foreground shadow-md shadow-primary/20'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+                      }
+                    `}
+                  >
+                    <tab.icon className={`w-4 h-4 transition-transform duration-300 ${activeTab === tab.id ? 'scale-110' : 'group-hover:scale-110'}`} />
+                    {tab.label}
+                  </button>
+                ))}
+              </nav>
+
+              {/* Filter Dropdown - Top Right */}
+              <div className="w-full md:w-64">
+                <CustomSelect
+                  options={uniqueRAs.map(ra => ({ value: ra, label: ra }))}
+                  value={selectedRA}
+                  onChange={setSelectedRA}
+                  placeholder="Filter by RA..."
+                />
+              </div>
+            </div>
+
+            {/* Tab Content */}
+            <div className="p-6 md:p-8 bg-gradient-to-b from-transparent to-secondary/20 min-h-[500px]">
+              {activeTab === 'timetable' && (
+                <TimetableView
+                  allocations={allocations}
+                  slotMap={slotMap}
+                  selectedRA={selectedRA}
+                />
+              )}
+              {activeTab === 'stats' && (
+                <StatsDashboard
+                  allocations={allocations}
+                  unallocatedLabs={unallocatedLabs}
+                  slotMap={slotMap}
+                />
+              )}
+              {activeTab === 'table' && (
+                <AllocationTable
+                  allocations={allocations}
+                  selectedRA={selectedRA}
+                />
+              )}
+              {activeTab === 'unallocated' && (
+                <AllocationTable
+                  allocations={unallocatedLabs}
+                  selectedRA={null}
+                />
+              )}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
