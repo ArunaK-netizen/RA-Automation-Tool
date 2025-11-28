@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { toast } from 'react-hot-toast'
 import { Draft, Allocation, SlotMap } from '@/lib/types'
-import { loadDrafts, saveDraft, deleteDraft } from '@/lib/storage'
+import { fetchDrafts, createDraft, updateDraft, deleteDraft } from '@/lib/api'
 import DraftManager from '@/components/DraftManager'
 import FileUpload from '@/components/FileUpload'
 import TimetableView from '@/components/TimetableView'
@@ -23,29 +23,33 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false)
 
   useEffect(() => {
-    const loaded = loadDrafts()
-    setDrafts(loaded)
+    loadDrafts()
   }, [])
 
-  const handleCreateDraft = (name: string) => {
-    // Unique Name Check
-    if (drafts.some(d => d.name.toLowerCase() === name.toLowerCase())) {
-      toast.error('A draft with this name already exists. Please choose a unique name.');
-      return;
+  const loadDrafts = async () => {
+    try {
+      setIsLoading(true)
+      const data = await fetchDrafts()
+      setDrafts(data)
+    } catch (error) {
+      toast.error('Failed to load drafts')
+    } finally {
+      setIsLoading(false)
     }
+  }
 
-    const newDraft: Draft = {
-      id: Date.now().toString(),
-      name,
-      createdAt: new Date().toISOString(),
-      allocations: [],
-      unallocatedLabs: [],
-      slotMap: {}
+  const handleCreateDraft = async (name: string) => {
+    try {
+      const newDraft = await createDraft(name)
+      setDrafts(prev => [newDraft, ...prev])
+      setSelectedDraft(newDraft)
+      setAllocations([])
+      setUnallocatedLabs([])
+      setSlotMap({})
+      toast.success('New draft created successfully')
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to create draft')
     }
-    const updated = saveDraft(newDraft)
-    setDrafts(updated)
-    setSelectedDraft(newDraft)
-    toast.success('New draft created successfully');
   }
 
   const handleSelectDraft = (draft: Draft) => {
@@ -56,19 +60,25 @@ export default function Home() {
     setSelectedRA(null)
   }
 
-  const handleDeleteDraft = (id: string) => {
-    const updated = deleteDraft(id)
-    setDrafts(updated)
-    if (selectedDraft?.id === id) {
-      setSelectedDraft(null)
-      setAllocations([])
-      setUnallocatedLabs([])
-      setSlotMap({})
+  const handleDeleteDraft = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this draft?')) return
+
+    try {
+      await deleteDraft(id)
+      setDrafts(prev => prev.filter(d => d.id !== id))
+      if (selectedDraft?.id === id) {
+        setSelectedDraft(null)
+        setAllocations([])
+        setUnallocatedLabs([])
+        setSlotMap({})
+      }
+      toast.success('Draft deleted')
+    } catch (error) {
+      toast.error('Failed to delete draft')
     }
-    toast.success('Draft deleted');
   }
 
-  const handleDataUploaded = (data: { allocations: Allocation[], unallocatedLabs: Allocation[], slotMap: SlotMap }) => {
+  const handleDataUploaded = async (data: { allocations: Allocation[], unallocatedLabs: Allocation[], slotMap: SlotMap }) => {
     if (selectedDraft) {
       const updatedDraft = {
         ...selectedDraft,
@@ -76,12 +86,21 @@ export default function Home() {
         unallocatedLabs: data.unallocatedLabs,
         slotMap: data.slotMap
       }
-      const updated = saveDraft(updatedDraft)
-      setDrafts(updated)
-      setSelectedDraft(updatedDraft)
-      setAllocations(data.allocations)
-      setUnallocatedLabs(data.unallocatedLabs)
-      setSlotMap(data.slotMap)
+
+      try {
+        setIsLoading(true)
+        const saved = await updateDraft(updatedDraft)
+        setDrafts(prev => prev.map(d => d.id === saved.id ? saved : d))
+        setSelectedDraft(saved)
+        setAllocations(data.allocations)
+        setUnallocatedLabs(data.unallocatedLabs)
+        setSlotMap(data.slotMap)
+        toast.success('Draft saved successfully')
+      } catch (error) {
+        toast.error('Failed to save draft')
+      } finally {
+        setIsLoading(false)
+      }
     }
   }
 
