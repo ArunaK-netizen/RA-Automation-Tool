@@ -1,16 +1,6 @@
 import { NextResponse } from 'next/server'
-import { promises as fs } from 'fs'
-import path from 'path'
-import { exec } from 'child_process'
-import { promisify } from 'util'
-import os from 'os'
-
-const execAsync = promisify(exec)
 
 export async function POST(req: Request) {
-  // Create a unique temporary directory for this request
-  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ra-allocation-'))
-
   try {
     const formData = await req.formData()
     const coursesFile = formData.get('courses') as File
@@ -20,58 +10,36 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Missing files' }, { status: 400 })
     }
 
-    // 1. Save uploaded files
-    const coursesPath = path.join(tempDir, 'courses.xlsx')
-    const rasPath = path.join(tempDir, 'ras.xlsx')
-    await fs.writeFile(coursesPath, Buffer.from(await coursesFile.arrayBuffer()))
-    await fs.writeFile(rasPath, Buffer.from(await rasFile.arrayBuffer()))
+    // Forward files to the external Python backend service
+    const backendUrl = process.env.BACKEND_URL
+    const apiKey = process.env.BACKEND_API_KEY
 
-    // 2. Create the L-to-Theory slot map file required by the script
-    const slotMapPath = path.join(tempDir, 'l_to_slot_map.csv')
-    let slotMapContent = ''
-    const theories = ['A1', 'F1', 'D1', 'TB1', 'TG1', 'B1', 'G1', 'E1', 'TC1', 'TAA1',
-      'C1', 'V1', 'V2', 'D1', 'TE1', 'TCC1', 'E1', 'TA1', 'TF1', 'TD1',
-      'A2', 'F2', 'D2', 'TB2', 'TG2', 'B2', 'G2', 'E2', 'TC2', 'TAA2',
-      'C2', 'TD2', 'TBB2', 'D2', 'TE2', 'TCC2', 'E2', 'TA2', 'TF2', 'TDD2']
-    for (let i = 1; i <= 160; i++) {
-      slotMapContent += `L${i},${theories[i % theories.length]}\n`
+    if (!backendUrl) {
+      return NextResponse.json({ error: 'Backend URL not configured' }, { status: 500 })
     }
-    await fs.writeFile(slotMapPath, slotMapContent)
 
-    // 3. Define output file path
-    const outputFile = path.join(tempDir, 'allocations.json')
+    const externalForm = new FormData()
+    externalForm.append('courses', coursesFile)
+    externalForm.append('ras', rasFile)
 
-    // 4. Run Python script with arguments
-    const scriptPath = path.join(process.cwd(), 'scripts', 'run_allocation.py')
-    // Ensure you have Python installed and pandas is available (pip install pandas)
-    // Arguments: --courses <path> --ras <path> --slotmap <path> --output <path>
-    const command = `python "${scriptPath}" --courses "${coursesPath}" --ras "${rasPath}" --slotmap "${slotMapPath}" --output "${outputFile}"`
-
-    await execAsync(command);
-
-    // 5. Read the generated JSON file
-    const outputData = await fs.readFile(outputFile, 'utf-8')
-    const result = JSON.parse(outputData)
-
-    // 6. Return the data to the frontend
-    return NextResponse.json({
-      allocations: result.allocations,
-      unallocatedLabs: result.unallocatedLabs
+    const resp = await fetch(`${backendUrl.replace(/\/$/, '')}/allocate`, {
+      method: 'POST',
+      body: externalForm,
+      headers: apiKey ? { 'X-API-KEY': apiKey } : undefined
     })
 
-  } catch (error) {
-    console.error('Error during allocation:', error)
-    const err = error as { stdout?: string, stderr?: string };
-    return NextResponse.json({
-      error: 'Failed to process files',
-      details: err.stderr || err.stdout || 'No details'
-    }, { status: 500 })
-  } finally {
-    // 7. Clean up the temporary directory
-    try {
-      await fs.rm(tempDir, { recursive: true, force: true })
-    } catch (cleanupError) {
-      console.error('Failed to clean up temp dir:', cleanupError)
+    const json = await resp.json()
+    if (!resp.ok) {
+      return NextResponse.json({ error: 'Allocation service failed', details: json }, { status: 502 })
     }
+
+    return NextResponse.json({
+      allocations: json.allocations || [],
+      unallocatedLabs: json.unallocatedLabs || []
+    })
+
+  } catch (err) {
+    console.error('Error during allocation:', err)
+    return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }
