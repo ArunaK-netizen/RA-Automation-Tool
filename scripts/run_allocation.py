@@ -1,6 +1,9 @@
 import pandas as pd
 import json
 from pulp import *
+import sys
+import argparse
+import os
 
 # ======================
 # CONFIGURATION
@@ -10,10 +13,26 @@ MIN_LABS = 4
 MAX_LABS = 5
 MIN_COURSES = 2
 MAX_COURSES = 3
-COURSES_FILE = "Files\Course details for RA.xlsx"
-RAS_FILE = "Files\Merged_RA.xlsx"
-SLOT_MAP_FILE = "temp/l_to_slot_map.csv"
-OUTPUT_FILE = "temp/allocations.json"
+
+# Default paths (fallback)
+DEFAULT_COURSES_FILE = "Files\Course details for RA.xlsx"
+DEFAULT_RAS_FILE = "Files\Merged_RA.xlsx"
+DEFAULT_SLOT_MAP_FILE = "temp/l_to_slot_map.csv"
+DEFAULT_OUTPUT_FILE = "temp/allocations.json"
+
+# Parse arguments
+parser = argparse.ArgumentParser(description='Run RA Allocation')
+parser.add_argument('--courses', default=DEFAULT_COURSES_FILE, help='Path to courses Excel file')
+parser.add_argument('--ras', default=DEFAULT_RAS_FILE, help='Path to RAs Excel file')
+parser.add_argument('--slotmap', default=DEFAULT_SLOT_MAP_FILE, help='Path to L-to-Slot map CSV')
+parser.add_argument('--output', default=DEFAULT_OUTPUT_FILE, help='Path to output JSON file')
+
+args = parser.parse_args()
+
+COURSES_FILE = args.courses
+RAS_FILE = args.ras
+SLOT_MAP_FILE = args.slotmap
+OUTPUT_FILE = args.output
 
 # ======================
 # TIMETABLE MAPPING
@@ -118,7 +137,7 @@ def count_late_slots(lab_list):
 # LOAD DATA
 # ======================
 
-print("Loading data...")
+print(f"Loading data from:\nCourses: {COURSES_FILE}\nRAs: {RAS_FILE}\nSlot Map: {SLOT_MAP_FILE}")
 courses_df = pd.read_excel(COURSES_FILE)
 ras_df = pd.read_excel(RAS_FILE)
 slot_map_df = pd.read_csv(SLOT_MAP_FILE, header=None, names=["L", "Theory"])
