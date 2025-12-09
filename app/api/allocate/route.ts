@@ -10,7 +10,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Missing files' }, { status: 400 })
     }
 
-    // Forward files to the external Python backend service
     const backendUrl = process.env.BACKEND_URL
     const apiKey = process.env.BACKEND_API_KEY
 
@@ -18,6 +17,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Backend URL not configured' }, { status: 500 })
     }
 
+    // Build form for backend
     const externalForm = new FormData()
     externalForm.append('courses', coursesFile)
     externalForm.append('ras', rasFile)
@@ -28,11 +28,30 @@ export async function POST(req: Request) {
       headers: apiKey ? { 'X-API-KEY': apiKey } : undefined
     })
 
-    const json = await resp.json()
-    if (!resp.ok) {
-      return NextResponse.json({ error: 'Allocation service failed', details: json }, { status: 502 })
+    // Read raw text first (so we can debug HTML errors)
+    const raw = await resp.text()
+
+    let json
+    try {
+      json = JSON.parse(raw)
+    } catch (e) {
+      console.error("Backend returned non-JSON response:", raw)
+
+      return NextResponse.json({
+        error: "Backend returned invalid JSON",
+        rawResponse: raw
+      }, { status: 502 })
     }
 
+    // Backend responded with JSON but not OK
+    if (!resp.ok) {
+      return NextResponse.json({
+        error: 'Allocation service failed',
+        details: json
+      }, { status: 502 })
+    }
+
+    // Return successful allocation result
     return NextResponse.json({
       allocations: json.allocations || [],
       unallocatedLabs: json.unallocatedLabs || []
